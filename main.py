@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import chromadb
-from sentence_transformers import SentenceTransformer
+import openai
 import os
 from dotenv import load_dotenv
 
@@ -14,8 +14,23 @@ app = FastAPI()
 chroma_client = chromadb.PersistentClient(path="./chroma_db")  # Persistent storage
 collection = chroma_client.get_or_create_collection("news_articles")
 
-# Load embedding model
-embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+# Load OpenAI API key
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    raise ValueError("Missing OpenAI API key! Set OPENAI_API_KEY in Heroku Config Vars.")
+
+openai.api_key = OPENAI_API_KEY
+
+# Function to generate OpenAI embeddings
+def get_embedding(text):
+    try:
+        response = openai.Embedding.create(
+            input=text,
+            model="text-embedding-ada-002"
+        )
+        return response["data"][0]["embedding"]  # Correct format
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"OpenAI Error: {str(e)}")
 
 # Define request models
 class NewsStoreRequest(BaseModel):
@@ -33,7 +48,7 @@ def store_news(request: NewsStoreRequest):
         all_texts = [request.newsSummary] + [article['description'] for article in request.articles]
 
         for i, text in enumerate(all_texts):
-            embedding = embedding_model.encode(text).tolist()
+            embedding = get_embedding(text)
             collection.add(
                 ids=[f"{request.ticker}-{i}"],
                 embeddings=[embedding],
@@ -42,18 +57,23 @@ def store_news(request: NewsStoreRequest):
 
         return {"message": f"Stored news data for {request.ticker} in ChromaDB"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Error storing news: {str(e)}")
 
 # Retrieve relevant news
 @app.post("/retrieve_news")
 def retrieve_news(request: QueryRequest):
     try:
-        query_embedding = embedding_model.encode(request.question).tolist()
+        query_embedding = get_embedding(request.question)
         results = collection.query(query_embeddings=[query_embedding], n_results=3)
 
-        return {"documents": results["documents"][0]} if results["documents"] else {"documents": []}
+        # Ensure results["documents"] exists and is not None
+        documents = results.get("documents", [])
+        if not documents:
+            return {"documents": []}
+
+        return {"documents": documents[0]}  # Returns the first list of results
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Error retrieving news: {str(e)}")
 
 # Test Route
 @app.get("/")
