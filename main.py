@@ -11,12 +11,12 @@ load_dotenv()
 app = FastAPI()
 
 # Ensure the ChromaDB folder exists
-CHROMA_PATH = "./chroma_db"
+CHROMA_PATH = "/tmp/chroma_db"
 if not os.path.exists(CHROMA_PATH):
     os.makedirs(CHROMA_PATH)
 
-# Initialize ChromaDB
-chroma_client = chromadb.PersistentClient(path=CHROMA_PATH)  # Persistent storage
+# Initialize ChromaDB (Temporary Storage)
+chroma_client = chromadb.PersistentClient(path=CHROMA_PATH)
 collection = chroma_client.get_or_create_collection("news_articles")
 
 # Load OpenAI API key
