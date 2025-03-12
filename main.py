@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import chromadb
-import openai
+from openai import OpenAI
 import os
 from dotenv import load_dotenv
 
@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = FastAPI()
+
+
 
 # Ensure the ChromaDB folder exists
 CHROMA_PATH = "/tmp/chroma_db"
@@ -24,16 +26,17 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
     raise ValueError("Missing OpenAI API key! Set OPENAI_API_KEY in Heroku Config Vars.")
 
-openai.api_key = OPENAI_API_KEY
+
+client = OpenAI(api_key=os.getenv(OPENAI_API_KEY))
 
 # Function to generate OpenAI embeddings
 def get_embedding(text):
     try:
-        response = openai.Embedding.create(
+        response = client.embeddings.create(
             input=text,
-            model="text-embedding-ada-002"
+            model="text-embedding-3-small"
         )
-        return response["data"][0]["embedding"]  # Correct format
+        return response.data[0].embedding
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"OpenAI Error: {str(e)}")
 
